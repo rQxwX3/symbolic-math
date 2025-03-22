@@ -58,12 +58,18 @@ Expression<T> Expression<T>::operator^(const Expression<T> &other) const {
 }
 
 template <typename T> Expression<T> Expression<T>::operator-() const {
-  if (m_isVar)
-    return *this;
-  if (m_isVal)
-    return Expression<T>(-m_val);
+  if (m_isVal) return Expression<T>(-m_val);
 
-  return Expression(std::make_shared<Expression<T>>(*this), '-', nullptr);
+  if (m_isVar)
+    return Expression(
+      std::make_shared<Expression<T>>(*this), '*',
+      std::make_shared<Expression<T>>(T(-1))
+    );
+
+  return Expression(
+    std::make_shared<Expression<T>>(*this), '*',
+    std::make_shared<Expression<T>>(T(-1))
+  );
 }
 
 template <typename T>
@@ -127,44 +133,39 @@ Expression<T> Expression<T>::substitute(const std::string &var, T val) const {
 
 template <typename T>
 T Expression<T>::evaluate(const std::map<std::string, T> &context) const {
-  if (m_isVal)
-    return m_val;
+  if (m_isVal) return m_val;
 
   if (m_isVar) {
-    auto it{context.find(m_var)};
-    if (it != context.end())
-      return it->second;
+    auto it {context.find(m_var)};
 
-    throw std::runtime_error("Variable not found\n");
+    if (it != context.end()) return it->second;
+
+    throw std::runtime_error("Variable not found");
   }
 
-  T leftVal{m_leftExpr->evaluate(context)},
-      rightVal{m_rightExpr ? m_rightExpr->evaluate(context) : T(0)};
+  T leftVal {m_leftExpr->evaluate(context)},
+    rightVal {m_rightExpr ? m_rightExpr->evaluate(context) : T(0)};
 
   switch (m_operation) {
-  case '-':
-    if (m_rightExpr)
+    case '-':
+      if (!m_rightExpr) return -leftVal;
       return leftVal - rightVal;
-    else
-      return -leftVal;
-  case '+':
-    return leftVal + rightVal;
-  case '*':
-    return leftVal * rightVal;
-  case '/':
-    return leftVal / rightVal;
-  case '^':
-    return std::pow(leftVal, rightVal);
-  case 's':
-    return std::sin(leftVal);
-  case 'c':
-    return std::cos(leftVal);
-  case 'l':
-    return std::log(leftVal);
-  case 'e':
-    return std::exp(leftVal);
-  default:
-    throw std::runtime_error("Unknown operator\n");
+
+    case '+': return leftVal + rightVal;
+    case '*': return leftVal * rightVal;
+    case '/':
+      if (rightVal != 0) return leftVal / rightVal;
+      throw std::runtime_error("Division by zero");
+
+    case '^': return std::pow(leftVal, rightVal);
+    case 's': return std::sin(leftVal);
+    case 'c': return std::cos(leftVal);
+    case 'l':
+      if (leftVal > 0) return std::log(leftVal);
+      throw std::runtime_error("Invalid argument for ln()");
+
+    case 'e': return std::exp(leftVal);
+    default: throw std::runtime_error("Unknown operator");
   }
 }
 
@@ -172,41 +173,28 @@ template <typename T> std::string Expression<T>::toString() const {
   if (m_isVal) {
     std::ostringstream ss;
 
-    if (std::floor(m_val) == m_val)
-      ss << static_cast<int>(m_val);
-    else
-      ss << m_val;
+    if (std::floor(m_val) == m_val) ss << static_cast<int>(m_val);
+    else ss << m_val;
 
     return ss.str();
   }
 
-  if (m_isVar)
-    return m_var;
+  if (m_isVar) return m_var;
 
   std::string leftString{m_leftExpr->toString()},
-      rightString{m_rightExpr ? m_rightExpr->toString() : ""};
+              rightString{m_rightExpr ? m_rightExpr->toString() : ""};
 
   switch (m_operation) {
-  case '+':
-    return leftString + " + " + rightString;
-  case '-':
-    return leftString + " - " + rightString;
-  case '*':
-    return "(" + leftString + ")" + "*" + "(" + rightString + ")";
-  case '/':
-    return "(" + leftString + ")" + "/" + "(" + rightString + ")";
-  case '^':
-    return "(" + leftString + ")" + "^" + "(" + rightString + ")";
-  case 's':
-    return "sin(" + leftString + ")";
-  case 'c':
-    return "cos(" + leftString + ")";
-  case 'l':
-    return "ln(" + leftString + ")";
-  case 'e':
-    return "exp(" + leftString + ")";
-  default:
-    return "";
+    case '+': return leftString + " + " + rightString;
+    case '-': return leftString + " - " + rightString;
+    case '*': return "(" + leftString + ")" + "*" + "(" + rightString + ")";
+    case '/': return "(" + leftString + ")" + "/" + "(" + rightString + ")";
+    case '^': return "(" + leftString + ")" + "^" + "(" + rightString + ")";
+    case 's': return "sin(" + leftString + ")";
+    case 'c': return "cos(" + leftString + ")";
+    case 'l': return "ln(" + leftString + ")";
+    case 'e': return "exp(" + leftString + ")";
+    default: return "";
   }
 }
 
@@ -222,64 +210,78 @@ Expression<T> Expression<T>::derivative(const std::string &var) const {
   if (!m_leftExpr) throw std::runtime_error("Invalid operation");
 
   bool leftIsVar{m_leftExpr->m_isVar && m_leftExpr->m_var == var},
-       leftIsVal{m_leftExpr->m_isVal};
+       leftIsVal{m_leftExpr->m_isVal}, leftIsExpr {m_leftExpr->m_leftExpr};
 
   Expression<T> leftDerivative{m_leftExpr->derivative(var)};
 
   switch (m_operation) {
-  case '+':
-    if (!m_rightExpr) return leftDerivative;
-    return leftDerivative + m_rightExpr->derivative(var);
+    case '+':
+      if (!m_rightExpr) return leftDerivative;
+      return leftDerivative + m_rightExpr->derivative(var);
 
-  case '-':
-    if (m_rightExpr) return -leftDerivative;
-    return leftDerivative - m_rightExpr->derivative(var);
+    case '-':
+      if (!m_rightExpr) return -leftDerivative;
+      return leftDerivative - m_rightExpr->derivative(var);
 
-  case '*':
-    if (!m_rightExpr) throw std::runtime_error("Missing operand for *");
-    return leftDerivative * *m_rightExpr +
-           *m_leftExpr * m_rightExpr->derivative(var);
+    case '*':
+      if (!m_rightExpr) throw std::runtime_error("Missing operand for *");
+      return leftDerivative * *m_rightExpr +
+             *m_leftExpr * m_rightExpr->derivative(var);
 
-  case '/':
-    if (!m_rightExpr) throw std::runtime_error("Missing operand for /");
-    return (leftDerivative * *m_rightExpr - *m_leftExpr *
-            m_rightExpr->derivative(var)) / (*m_rightExpr * *m_rightExpr);
+    case '/':
+      if (!m_rightExpr) throw std::runtime_error("Missing operand for /");
+      return (leftDerivative * *m_rightExpr - *m_leftExpr *
+              m_rightExpr->derivative(var)) / (*m_rightExpr * *m_rightExpr);
 
-  case '^': {
-    if (!m_rightExpr) throw std::runtime_error("Missing operand for ^");
+    case '^': {
+      if (!m_rightExpr) throw std::runtime_error("Missing operand for ^");
 
-    bool rightIsVar {m_rightExpr->m_isVar && m_rightExpr->m_var == var},
-         rightIsVal {m_rightExpr->m_isVal};
+      bool rightIsVar {m_rightExpr->m_isVar && m_rightExpr->m_var == var},
+           rightIsVal {m_rightExpr->m_isVal},
+           rightIsExpr {m_rightExpr->m_leftExpr};
 
-    if (leftIsVal && rightIsVal) return Expression<T>(0);
+      // const ^ const
+      if (leftIsVal && rightIsVal) return Expression<T>(0);
 
-    if (leftIsVar && (rightIsVal || !rightIsVar)) {
-      Expression<T> exponent{*m_rightExpr - Expression<T>(1)};
-      return *m_rightExpr * (*m_leftExpr ^ (exponent)) * leftDerivative;
+      // x ^ const
+      if (leftIsVar && (!rightIsVar && !rightIsExpr)) {
+        Expression<T> exponent{*m_rightExpr - Expression<T>(1)};
+        return *m_rightExpr * (*m_leftExpr ^ (exponent)) * leftDerivative;
+      }
+
+      // const ^ (x / expr)
+      if ((!leftIsVar && !leftIsExpr) && (rightIsExpr || rightIsVar)) {
+        return *this * m_rightExpr->derivative(var) * ln(*m_leftExpr);
+      }
+
+      // (expr/x) ^ (expr/x)
+      if ((leftIsExpr || leftIsVar) && (rightIsExpr || rightIsVar))
+        return *this * (m_rightExpr->derivative(var) * (ln(*m_leftExpr) +
+               *m_rightExpr * leftDerivative / *m_leftExpr));
+
+      throw std::runtime_error("Unknown operands for ^");
     }
 
-    break;
-  }
+    case 's':
+      if (m_leftExpr) return cos(*m_leftExpr) * leftDerivative;
+      throw std::runtime_error("Missing argument for sin");
 
-  case 's':
-    if (!m_leftExpr) throw std::runtime_error("Missing argument for sin");
-    return cos(*m_leftExpr) * leftDerivative;
+    case 'c':
+      if (m_leftExpr) return -sin(*m_leftExpr) * leftDerivative;
+      throw std::runtime_error("Missing argument for cos");
 
-  case 'c':
-    if (!m_leftExpr) throw std::runtime_error("Missing argument for cos");
-    return -sin(*m_leftExpr) * leftDerivative;
+    case 'l':
+      if (m_leftExpr)  return Expression<T>(1) / leftDerivative;
+      throw std::runtime_error("Missing argument for ln");
 
-  case 'l':
-    if (!m_leftExpr) throw std::runtime_error("Missing argument for ln");
-    return Expression<T>(1) / leftDerivative;
-
-  case 'e':
-    if (!m_leftExpr) throw std::runtime_error("Missing argument for exp");
-    return exp(*m_leftExpr) * leftDerivative;
+    case 'e':
+      if (m_leftExpr) return exp(*m_leftExpr) * leftDerivative;
+      throw std::runtime_error("Missing argument for exp");
   }
 
   throw std::runtime_error(
-      "Derivative calculation failed due to unknown operation");
+      "Derivative calculation failed due to unknown operation"
+  );
 }
 
 template <typename T>
@@ -289,10 +291,8 @@ Expression<T> Expression<T>::fromString(const std::string &exprString) {
 }
 
 template <typename T> Expression<T> Expression<T>::simplify() const {
-  if (m_isVal || m_isVar)
-    return *this;
+  if (m_isVal || m_isVar) return *this;
 
-  // Unary operations simplification is currently unsupported
   if (!m_leftExpr || !m_rightExpr)
     return Expression<T>(m_leftExpr, m_operation, m_rightExpr);
 
@@ -301,24 +301,20 @@ template <typename T> Expression<T> Expression<T>::simplify() const {
 
   // Both operands are constants
   if (leftSimplified.m_isVal && rightSimplified.m_isVal) {
-    T leftVal{leftSimplified.m_val}, rightVal{rightSimplified.m_val};
+    T leftVal {leftSimplified.m_val}, rightVal {rightSimplified.m_val};
 
     switch (m_operation) {
-    case '+':
-      return Expression<T>(leftVal + rightVal);
-    case '-':
-      return Expression<T>(leftVal - rightVal);
-    case '*':
-      return Expression<T>(leftVal * rightVal);
-    case '/':
-      if (rightVal != 0)
+      case '+': return Expression<T>(leftVal + rightVal);
+      case '-': return Expression<T>(leftVal - rightVal);
+      case '*': return Expression<T>(leftVal * rightVal);
+      case '/':
+        if (rightVal == 0) throw std::runtime_error("Dividing by zero\n");
         return Expression<T>(leftVal / rightVal);
-      else
-        throw std::runtime_error("Dividing by zero\n");
-    case '^':
-      return Expression<T>(std::pow(leftVal, rightVal));
-    default:
-      break;
+
+      case '^':
+        return Expression<T>(std::pow(leftVal, rightVal));
+
+      default: break;
     }
   }
 
@@ -326,31 +322,30 @@ template <typename T> Expression<T> Expression<T>::simplify() const {
   if (leftSimplified.m_isVar && rightSimplified.m_isVar &&
       rightSimplified.m_var == leftSimplified.m_var) {
     switch (m_operation) {
-    case '+':
-      return leftSimplified * Expression<T>(2);
-    case '-':
-      return Expression<T>(0);
-    case '*':
-      return leftSimplified ^ Expression<T>(2);
-    case '/':
-      return Expression<T>(1);
+      case '+': return leftSimplified * Expression<T>(2);
+      case '-': return Expression<T>(0);
+      case '*': return leftSimplified ^ Expression<T>(2);
+      case '/': return Expression<T>(1);
     }
   }
 
   // One of the operands is a constant, and the other is a variable
   switch (m_operation) {
-
   case '+':
     if (leftSimplified.m_isVal && leftSimplified.m_val == 0)
       return rightSimplified;
     if (rightSimplified.m_isVal && rightSimplified.m_val == 0)
       return leftSimplified;
 
+    break;
+
   case '-':
     if (leftSimplified.m_isVal && leftSimplified.m_val == 0)
-      return rightSimplified;
+      return -rightSimplified;
     if (rightSimplified.m_isVal && rightSimplified.m_val == 0)
       return leftSimplified;
+
+    break;
 
   case '*':
     if (leftSimplified.m_isVal) {
@@ -359,12 +354,14 @@ template <typename T> Expression<T> Expression<T>::simplify() const {
       if (leftSimplified.m_val == 0)
         return Expression<T>(0);
     }
+
     if (rightSimplified.m_isVal) {
       if (rightSimplified.m_val == 1)
         return leftSimplified;
       if (rightSimplified.m_val == 0)
         return Expression<T>(0);
     }
+
     break;
 
   case '/':
@@ -372,6 +369,7 @@ template <typename T> Expression<T> Expression<T>::simplify() const {
       return Expression<T>(0);
     if (rightSimplified.m_isVal && rightSimplified.m_val == 1)
       return leftSimplified;
+
     break;
 
   case '^':

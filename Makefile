@@ -19,6 +19,14 @@ clean:
 	rm -f $(OBJ) $(TARGET)
 
 test:
+	./differentiator --diff "ln(x) / cos(x)" --by x
+	./differentiator --diff "x ^ x" --by x
+	./differentiator --diff "x ^ y" --by y
+	./differentiator --diff "x / 2" --by x
+	./differentiator --eval "x / y" x=2 y=0
+	./differentiator --eval "ln(x)" x=-1
+	./differentiator --eval "ln(x)" x=0
+	./differentiator --eval "ln(x)" x=3
 	./differentiator --eval "x * y" x=10 y=12
 	./differentiator --diff "x / sin(x)" --by x
 	./differentiator --diff "x ^ 5" --by x
