@@ -1,22 +1,13 @@
 CXX = g++
-CXXFLAGS = -std=c++11 -Wall -g
+CXXFLAGS = -std=c++11 -Wall
+SRC = $(wildcard ./src/*.cpp)
+OUT = differentiator
 
-SRC_DIR = src
-INC_DIR = include
-
-SRC = $(SRC_DIR)/main.cpp
-OBJ = $(SRC:.cpp=.o)
-
-TARGET = differentiator
-
-$(TARGET): $(OBJ)
-	$(CXX) $(OBJ) -o $(TARGET)
-
-%.o: %.cpp
-	$(CXX) -c $< -o $@
+$(OUT): $(SRC)
+	$(CXX) $(CXXFLAGS) $(SRC) -o $(OUT)
 
 clean:
-	rm -f $(OBJ) $(TARGET)
+	rm -f $(OUT)
 
 test:
 	./differentiator --diff "ln(x) / cos(x)" --by x
@@ -35,3 +26,5 @@ test:
 	./differentiator --diff "exp(x) * x ^ 3" --by x
 	./differentiator --diff "ln(x ^ 3)" --by x
 	./differentiator --diff "(-x)*3" --by x
+
+.PHONY: clean test
