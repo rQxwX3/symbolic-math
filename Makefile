@@ -34,3 +34,4 @@ test:
 	./differentiator --diff "x * y" --by x
 	./differentiator --diff "exp(x) * x ^ 3" --by x
 	./differentiator --diff "ln(x ^ 3)" --by x
+	./differentiator --diff "(-x)*3" --by x
